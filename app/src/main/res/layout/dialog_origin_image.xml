@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout>
+
+    <data>
+
+        <variable
+            name="path"
+            type="String" />
+
+        <variable
+            name="dialog"
+            type="com.hyejineee.fluxmemo.view.dialog.OriginImageDialog" />
+    </data>
+
+    <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:id="@+id/origin_image_dialog"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000">
+
+        <ImageButton
+            android:id="@+id/close_button"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:background="@drawable/ic_close"
+            android:layout_alignParentRight="true"
+            android:padding="8dp"
+            android:layout_margin="16dp"
+            android:onClick="@{()->dialog.close()}" />
+
+        <ImageView
+            android:id="@+id/origin_image"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            app:loadOriginImage="@{path}" />
+
+    </RelativeLayout>
+</layout>

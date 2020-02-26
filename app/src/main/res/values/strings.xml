@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">FluxMemo</string>
+
+    <string name="camera">촬영하여 가져오기</string>
+    <string name="gallery">갤러리에서 가져오기</string>
+    <string name="link">url로 가져오기</string>
+
+    <string name="image_max_count_caution">이미지는 최대 5개까지만 가능합니다.</string>
+</resources>
