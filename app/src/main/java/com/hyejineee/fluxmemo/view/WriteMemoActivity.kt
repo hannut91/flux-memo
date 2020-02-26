@@ -2,6 +2,7 @@ package com.hyejineee.fluxmemo.view
 
 import android.app.Activity
 import android.content.Intent
+import android.drm.DrmStore
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.View
@@ -9,6 +10,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.databinding.DataBindingUtil.setContentView
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.hyejineee.fluxmemo.ActionType
+import com.hyejineee.fluxmemo.Actions
+import com.hyejineee.fluxmemo.Dispatcher
 import com.hyejineee.fluxmemo.R
 import com.hyejineee.fluxmemo.databinding.ActivityWriteMemoBinding
 import com.hyejineee.fluxmemo.model.Memo
@@ -45,13 +49,22 @@ class WriteMemoActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+
+
+
         val memoId = intent.getLongExtra("memoId", -1)
         memoViewModel.isEditMode = memoId > 0
         if (memoViewModel.isEditMode) {
-            getMemo(memoId)
+            Dispatcher.dispatch(Actions(ActionType.GET_MEMO, memoId))
         }
 
         setView()
+
+        memoViewModel.onMemoChange
+            .subscribe {
+                viewDataBinding.memo = it.memo
+                imageAdapter.images = it.images.map { imagePath -> imagePath.path }
+            }.addTo(compositeDisposable)
     }
 
     override fun onDestroy() {
@@ -170,7 +183,7 @@ class WriteMemoActivity : AppCompatActivity() {
         val title = viewDataBinding.memoTitleEditText.text.toString().trim()
         val content = viewDataBinding.memoContentEditText.text.toString().trim()
 
-        val memoId = memoViewModel.currentMemo?.memo!!.id
+        val memoId = memoViewModel.memo.memo.id
         val memo = Memo(id = memoId, title = title, content = content)
         if (memo.isEmpty()) {
             finish()
@@ -182,17 +195,6 @@ class WriteMemoActivity : AppCompatActivity() {
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe { finish() }
             .addTo(compositeDisposable)
-    }
-
-    private fun getMemo(id: Long) {
-        memoViewModel.getMemo(id)
-            .subscribeOn(Schedulers.newThread())
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe {
-                viewDataBinding.memo = it.memo
-                memoViewModel.currentMemo = it
-                imageAdapter.images = it.images.map { imagePath -> imagePath.path }
-            }.addTo(compositeDisposable)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
