@@ -7,7 +7,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.databinding.DataBindingUtil.setContentView
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.hyejineee.fluxmemo.ActionType
-import com.hyejineee.fluxmemo.Actions
+import com.hyejineee.fluxmemo.Action
 import com.hyejineee.fluxmemo.Dispatcher
 import com.hyejineee.fluxmemo.R
 import com.hyejineee.fluxmemo.databinding.ActivityMainBinding
@@ -30,7 +30,7 @@ class MainActivity : AppCompatActivity() {
         setView()
         getMemos()
 
-        Dispatcher.dispatch(Actions(ActionType.GET_MEMOS,""))
+        Dispatcher.dispatch(Action(ActionType.GET_MEMOS,""))
     }
 
     override fun onDestroy() {
