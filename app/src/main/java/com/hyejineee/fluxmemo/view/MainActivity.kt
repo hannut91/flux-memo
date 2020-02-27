@@ -6,14 +6,15 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.databinding.DataBindingUtil.setContentView
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.hyejineee.fluxmemo.ActionType
+import com.hyejineee.fluxmemo.Actions
+import com.hyejineee.fluxmemo.Dispatcher
 import com.hyejineee.fluxmemo.R
 import com.hyejineee.fluxmemo.databinding.ActivityMainBinding
 import com.hyejineee.fluxmemo.view.adapter.MemoAdapter
 import com.hyejineee.fluxmemo.viewmodels.MemoViewModel
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
-import io.reactivex.schedulers.Schedulers
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class MainActivity : AppCompatActivity() {
@@ -26,9 +27,10 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        println(Double.MAX_VALUE)
         setView()
         getMemos()
+
+        Dispatcher.dispatch(Actions(ActionType.GET_MEMOS,""))
     }
 
     override fun onDestroy() {
@@ -45,6 +47,7 @@ class MainActivity : AppCompatActivity() {
         val i = Intent(this, WriteMemoActivity::class.java)
             .putExtra("memoId", memoId)
         startActivity(i)
+
     }
 
     private fun setView() {
@@ -56,9 +59,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getMemos() {
-        memoViewModel.getAllMemos()
-            .subscribeOn(Schedulers.newThread())
-            .observeOn(AndroidSchedulers.mainThread())
+        memoViewModel.onMemosChange
             .subscribe { memosAdapter.memos = it }
             .addTo(compositeDisposable)
     }
