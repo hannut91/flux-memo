@@ -30,7 +30,6 @@ class MemoViewModel(private val memoDataSource: MemoDataSource) : ViewModel() {
         }
     var onMemoChange: Subject<MemoWithImages> = BehaviorSubject.createDefault(memo)
 
-
     init {
         setSubscribeDispatcher()
     }
@@ -46,10 +45,14 @@ class MemoViewModel(private val memoDataSource: MemoDataSource) : ViewModel() {
                 }
                 ActionType.GET_MEMO -> {
                     if (action.data[0] is Long) {
-                        getMemo(action.data[0] as Long)
-                            .subscribeOn(Schedulers.newThread())
-                            .observeOn(AndroidSchedulers.mainThread())
-                            .subscribe { memo = it }
+                        if (action.data[0] == -1L) {
+                            memo = MemoWithImages()
+                        } else {
+                            getMemo(action.data[0] as Long)
+                                .subscribeOn(Schedulers.newThread())
+                                .observeOn(AndroidSchedulers.mainThread())
+                                .subscribe { memo = it }
+                        }
                     }
                 }
                 ActionType.UPDATE_MEMO -> {
@@ -66,11 +69,16 @@ class MemoViewModel(private val memoDataSource: MemoDataSource) : ViewModel() {
                         .subscribeOn(Schedulers.newThread())
                         .subscribe()
                 }
+                ActionType.CREATE_MEMO ->{
+                    val memo = action.data[0] as Memo
+                    val images = action.data[1] as List<String>
+                    createMemoWithImages(memo, images)
+                        .subscribeOn(Schedulers.newThread())
+                        .subscribe {}
+                }
             }
         }.addTo(compositeDisposable)
     }
-
-    var isEditMode = false
 
     fun createMemoWithImages(memo: Memo, images: List<String>) = memoDataSource.save(memo, images)
 

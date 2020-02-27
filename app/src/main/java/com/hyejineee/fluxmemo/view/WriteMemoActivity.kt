@@ -2,6 +2,7 @@ package com.hyejineee.fluxmemo.view
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.View
@@ -20,14 +21,14 @@ import com.hyejineee.fluxmemo.view.adapter.ImageAdapter
 import com.hyejineee.fluxmemo.view.dialog.OriginImageDialog
 import com.hyejineee.fluxmemo.view.dialog.WriteImageUrlDialog
 import com.hyejineee.fluxmemo.viewmodels.MemoViewModel
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.internal.schedulers.IoScheduler
 import io.reactivex.rxkotlin.addTo
-import io.reactivex.schedulers.Schedulers
 import kotlinx.android.synthetic.main.activity_write_memo.*
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 
 private const val FILE_PROVIDER = "com.hyejineee.linechallenge.fileprovider"
 private const val TAKE_PICTURE = 1
@@ -41,6 +42,7 @@ class WriteMemoActivity : AppCompatActivity() {
 
     private val memoViewModel: MemoViewModel by viewModel()
     private val imageAdapter = ImageAdapter()
+    private var editMode = false
 
     private lateinit var imageFilePath: String
     private lateinit var viewDataBinding: ActivityWriteMemoBinding
@@ -48,19 +50,10 @@ class WriteMemoActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val memoId = intent.getLongExtra("memoId", -1)
-        memoViewModel.isEditMode = memoId > 0
-        if (memoViewModel.isEditMode) {
-            Dispatcher.dispatch(Action(ActionType.GET_MEMO, memoId))
-        }
+        editMode = memoViewModel.memo.memo.id > 0
 
         setView()
-
-        memoViewModel.onMemoChange
-            .subscribe {
-                viewDataBinding.memo = it.memo
-                imageAdapter.images = it.images.map { imagePath -> imagePath.path }
-            }.addTo(compositeDisposable)
+        setEvents()
     }
 
     override fun onDestroy() {
@@ -81,8 +74,10 @@ class WriteMemoActivity : AppCompatActivity() {
 
     fun deleteMemo(view: View) {
         promptShow(this, title = "주의", content = "삭제하시겠습니까?",
-            positiveCallback = { _, _ -> Dispatcher.dispatch(
-                Action(ActionType.DELETE_MEMO,memoViewModel.memo.memo.id))
+            positiveCallback = { _, _ ->
+                Dispatcher.dispatch(
+                    Action(ActionType.DELETE_MEMO, memoViewModel.memo.memo.id)
+                )
                 finish()
             }
         )
@@ -104,14 +99,15 @@ class WriteMemoActivity : AppCompatActivity() {
             when (i) {
                 0 -> takePicture()
                 1 -> pickFromGallery()
-                2 ->
-                    WriteImageUrlDialog { url ->
-                        onActivityResult(
-                            GET_URL, Activity.RESULT_OK, Intent().putExtra("url", url)
-                        )
-                    }.show(supportFragmentManager, "")
+                2 -> showWriteImageUrlDialog()
             }
         }
+    }
+
+    private fun showWriteImageUrlDialog() {
+        WriteImageUrlDialog { url ->
+            onActivityResult(GET_URL, Activity.RESULT_OK, Intent().putExtra("url", url))
+        }.show(supportFragmentManager, "")
     }
 
     private fun setView() {
@@ -139,13 +135,21 @@ class WriteMemoActivity : AppCompatActivity() {
             )
         }
 
-        if (!memoViewModel.isEditMode) {
+        if (!editMode) {
             viewDataBinding.deleteButton.visibility = View.GONE
         }
     }
 
+    private fun setEvents() {
+        memoViewModel.onMemoChange
+            .subscribe {
+                viewDataBinding.memo = it.memo
+                imageAdapter.images = it.images.map { imagePath -> imagePath.path }
+            }.addTo(compositeDisposable)
+    }
+
     private fun updateOrCreate() {
-        if (memoViewModel.isEditMode) {
+        if (editMode) {
             updateMemo()
             return
         }
@@ -163,11 +167,8 @@ class WriteMemoActivity : AppCompatActivity() {
             return
         }
 
-        memoViewModel.createMemoWithImages(memo, imageAdapter.images)
-            .subscribeOn(Schedulers.newThread())
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe { finish() }
-            .addTo(compositeDisposable)
+        Dispatcher.dispatch(Action(ActionType.CREATE_MEMO, memo, imageAdapter.images))
+        finish()
     }
 
     private fun updateMemo() {
@@ -193,19 +194,18 @@ class WriteMemoActivity : AppCompatActivity() {
 
         when (requestCode) {
             TAKE_PICTURE -> {
-                if (imageFilePath.isEmpty()) {
-                    return
-                }
+                if (imageFilePath.isEmpty()) { return }
 
                 imageAdapter.appendImage(imageFilePath)
             }
             GET_GALLERY -> {
                 try {
-                    findCopyImagePath(this, data.data!!).let {
-                        imageAdapter.appendImage(it)
-                    }
-                } catch (e: IOException) {
-                    snackBarShort(viewDataBinding.writeMemoActivity, "이미지 추가에 실패했습니다.")
+                    createCopyImagePath(
+                        findGalleryImage(this, data.data!!),
+                        createTempFile()
+                    ).let { imageAdapter.appendImage(it) }
+                }catch (e:IOException){
+                    snackBarShort(viewDataBinding.writeMemoActivity,"이미지를 추가할 수 없습니다.")
                 }
             }
             GET_URL -> {
@@ -215,30 +215,38 @@ class WriteMemoActivity : AppCompatActivity() {
     }
 
     private fun takePicture() {
-        Intent(MediaStore.ACTION_IMAGE_CAPTURE).also { takePictureIntent ->
-            takePictureIntent.resolveActivity(packageManager)?.also {
-                val newImage: File? = try {
-                    createImageFile(this)
-                } catch (ex: IOException) {
-                    null
-                }
-
-                newImage?.also {
-                    imageFilePath = it.absolutePath
-                    val imagePath = FileProvider.getUriForFile(
-                        this,
-                        FILE_PROVIDER,
-                        it
-                    )
-                    takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, imagePath)
-                    startActivityForResult(takePictureIntent, TAKE_PICTURE)
-                }
-            }
+        lateinit var imagePath: Uri
+        try {
+            imagePath = createImagePath()
+        } catch (e: IOException) {
+            snackBarShort(viewDataBinding.writeMemoActivity, "파일 생성에 실패했습니다.")
+            return
         }
+
+        val i = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, imagePath)
+        }
+        startActivityForResult(i, TAKE_PICTURE)
+    }
+
+    private fun createImagePath(): Uri {
+        val newImage = createTempFile()
+        imageFilePath = newImage.absolutePath
+        return FileProvider.getUriForFile(
+            this,
+            FILE_PROVIDER,
+            newImage
+        )
+    }
+
+    private fun createTempFile(): File {
+        val rootDir = getRootDirectory(this)
+        return createImageFile("memo_", "yyyyMMss_HHmmssSSS", rootDir, ".jpg")
     }
 
     private fun pickFromGallery() {
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*" }
-        intent.resolveActivity(packageManager)?.let { startActivityForResult(intent, GET_GALLERY) }
+        intent.resolveActivity(packageManager)
+            ?.let { startActivityForResult(intent, GET_GALLERY) }
     }
 }

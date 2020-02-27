@@ -28,7 +28,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         setView()
-        getMemos()
+        setEvents()
 
         Dispatcher.dispatch(Action(ActionType.GET_MEMOS,""))
     }
@@ -40,14 +40,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun goToWriteMemoActivity(view: View) {
-        startActivity(Intent(this, WriteMemoActivity::class.java))
+        goToMemoDetailActivity(-1)
     }
 
     private fun goToMemoDetailActivity(memoId: Long) {
-        val i = Intent(this, WriteMemoActivity::class.java)
-            .putExtra("memoId", memoId)
-        startActivity(i)
-
+        Dispatcher.dispatch(Action(ActionType.GET_MEMO, memoId))
+        startActivity(Intent(this, WriteMemoActivity::class.java))
     }
 
     private fun setView() {
@@ -58,7 +56,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun getMemos() {
+    private fun setEvents() {
         memoViewModel.onMemosChange
             .subscribe { memosAdapter.memos = it }
             .addTo(compositeDisposable)
