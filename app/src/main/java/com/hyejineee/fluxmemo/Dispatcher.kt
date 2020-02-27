@@ -4,10 +4,9 @@ import io.reactivex.subjects.PublishSubject
 import io.reactivex.subjects.Subject
 
 object Dispatcher {
-    val onAction:Subject<Actions> = PublishSubject.create()
+    val onAction:Subject<Action> = PublishSubject.create()
 
-    fun dispatch(action:Actions){
+    fun dispatch(action:Action){
         onAction.onNext(action)
     }
-
 }

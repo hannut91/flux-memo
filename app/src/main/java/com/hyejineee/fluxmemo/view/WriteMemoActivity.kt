@@ -2,7 +2,6 @@ package com.hyejineee.fluxmemo.view
 
 import android.app.Activity
 import android.content.Intent
-import android.drm.DrmStore
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.View
@@ -11,7 +10,7 @@ import androidx.core.content.FileProvider
 import androidx.databinding.DataBindingUtil.setContentView
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.hyejineee.fluxmemo.ActionType
-import com.hyejineee.fluxmemo.Actions
+import com.hyejineee.fluxmemo.Action
 import com.hyejineee.fluxmemo.Dispatcher
 import com.hyejineee.fluxmemo.R
 import com.hyejineee.fluxmemo.databinding.ActivityWriteMemoBinding
@@ -49,13 +48,10 @@ class WriteMemoActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-
-
-
         val memoId = intent.getLongExtra("memoId", -1)
         memoViewModel.isEditMode = memoId > 0
         if (memoViewModel.isEditMode) {
-            Dispatcher.dispatch(Actions(ActionType.GET_MEMO, memoId))
+            Dispatcher.dispatch(Action(ActionType.GET_MEMO, memoId))
         }
 
         setView()
@@ -85,7 +81,10 @@ class WriteMemoActivity : AppCompatActivity() {
 
     fun deleteMemo(view: View) {
         promptShow(this, title = "주의", content = "삭제하시겠습니까?",
-            positiveCallback = { _, _ -> deleteMemo(memoViewModel.currentMemo?.memo!!.id) }
+            positiveCallback = { _, _ -> Dispatcher.dispatch(
+                Action(ActionType.DELETE_MEMO,memoViewModel.memo.memo.id))
+                finish()
+            }
         )
     }
 
@@ -145,14 +144,6 @@ class WriteMemoActivity : AppCompatActivity() {
         }
     }
 
-    private fun deleteMemo(id: Long) {
-        memoViewModel.deleteMemo(id)
-            .subscribeOn(Schedulers.newThread())
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe { finish() }
-            .addTo(compositeDisposable)
-    }
-
     private fun updateOrCreate() {
         if (memoViewModel.isEditMode) {
             updateMemo()
@@ -180,21 +171,18 @@ class WriteMemoActivity : AppCompatActivity() {
     }
 
     private fun updateMemo() {
+        val memoId = memoViewModel.memo.memo.id
         val title = viewDataBinding.memoTitleEditText.text.toString().trim()
         val content = viewDataBinding.memoContentEditText.text.toString().trim()
 
-        val memoId = memoViewModel.memo.memo.id
         val memo = Memo(id = memoId, title = title, content = content)
         if (memo.isEmpty()) {
             finish()
             return
         }
 
-        memoViewModel.updateMemo(memo, imageAdapter.images)
-            .subscribeOn(Schedulers.newThread())
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe { finish() }
-            .addTo(compositeDisposable)
+        Dispatcher.dispatch(Action(ActionType.UPDATE_MEMO, memo, imageAdapter.images))
+        finish()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
