@@ -13,6 +13,9 @@ interface ImageDAO {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(path: ImagePath)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insert(vararg path: ImagePath)
+
     @Delete
     fun delete(imagePath: ImagePath)
 

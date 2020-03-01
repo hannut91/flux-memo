@@ -6,7 +6,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.hyejineee.fluxmemo.databinding.ImageItemBinding
 
 class ImageAdapter : RecyclerView.Adapter<ImageAdapter.ViewHolder>() {
-    var clickListener: (String) -> Unit = {}
+    var clickListener: (String) -> Unit = {
+    }
     var longClickListener: (Int, String) -> Unit = { _, _ -> }
 
     var images = listOf<String>()
