@@ -10,8 +10,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.databinding.DataBindingUtil.setContentView
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.hyejineee.fluxmemo.ActionType
 import com.hyejineee.fluxmemo.Action
+import com.hyejineee.fluxmemo.ActionType
 import com.hyejineee.fluxmemo.Dispatcher
 import com.hyejineee.fluxmemo.R
 import com.hyejineee.fluxmemo.databinding.ActivityWriteMemoBinding
@@ -22,13 +22,10 @@ import com.hyejineee.fluxmemo.view.dialog.OriginImageDialog
 import com.hyejineee.fluxmemo.view.dialog.WriteImageUrlDialog
 import com.hyejineee.fluxmemo.viewmodels.MemoViewModel
 import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.internal.schedulers.IoScheduler
 import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.activity_write_memo.*
 import org.koin.androidx.viewmodel.ext.android.viewModel
-import java.io.File
 import java.io.IOException
-import java.io.InputStream
 
 private const val FILE_PROVIDER = "com.hyejineee.linechallenge.fileprovider"
 private const val TAKE_PICTURE = 1
@@ -194,18 +191,19 @@ class WriteMemoActivity : AppCompatActivity() {
 
         when (requestCode) {
             TAKE_PICTURE -> {
-                if (imageFilePath.isEmpty()) { return }
-
                 imageAdapter.appendImage(imageFilePath)
             }
             GET_GALLERY -> {
                 try {
+                    val rootDir = getRootDirectory(this)
+                    val newImage = createImageFile(rootDir)
+
                     createCopyImagePath(
                         findGalleryImage(this, data.data!!),
-                        createTempFile()
+                        newImage
                     ).let { imageAdapter.appendImage(it) }
-                }catch (e:IOException){
-                    snackBarShort(viewDataBinding.writeMemoActivity,"이미지를 추가할 수 없습니다.")
+                } catch (e: IOException) {
+                    snackBarShort(viewDataBinding.writeMemoActivity, "이미지를 추가할 수 없습니다.")
                 }
             }
             GET_URL -> {
@@ -223,30 +221,24 @@ class WriteMemoActivity : AppCompatActivity() {
             return
         }
 
-        val i = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
-            putExtra(MediaStore.EXTRA_OUTPUT, imagePath)
-        }
+        val i = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+            .putExtra(MediaStore.EXTRA_OUTPUT, imagePath)
         startActivityForResult(i, TAKE_PICTURE)
     }
 
+    private fun pickFromGallery() {
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*" }
+        startActivityForResult(intent, GET_GALLERY)
+    }
+
     private fun createImagePath(): Uri {
-        val newImage = createTempFile()
+        val rootDir = getRootDirectory(this)
+        val newImage = createImageFile(rootDir)
         imageFilePath = newImage.absolutePath
         return FileProvider.getUriForFile(
             this,
             FILE_PROVIDER,
             newImage
         )
-    }
-
-    private fun createTempFile(): File {
-        val rootDir = getRootDirectory(this)
-        return createImageFile("memo_", "yyyyMMss_HHmmssSSS", rootDir, ".jpg")
-    }
-
-    private fun pickFromGallery() {
-        val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*" }
-        intent.resolveActivity(packageManager)
-            ?.let { startActivityForResult(intent, GET_GALLERY) }
     }
 }

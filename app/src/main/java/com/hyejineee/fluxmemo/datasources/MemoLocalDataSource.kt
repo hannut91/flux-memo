@@ -14,14 +14,11 @@ class MemoLocalDataSource(private val db: MemoAppDatabase) : MemoDataSource {
     override fun save(memo: Memo, images: List<String>) = Completable.create {
         db.runInTransaction {
             val id = db.memoDao().insert(memo)
-            for (i in images) {
-                db.imageDao().insert(
-                    ImagePath(
-                        memoId = id,
-                        path = i
-                    )
-                )
-            }
+            db.imageDao().insert(
+                *images.map {
+                    ImagePath(memoId = id, path = it)
+                }.toTypedArray()
+            )
         }
         it.onComplete()
     }

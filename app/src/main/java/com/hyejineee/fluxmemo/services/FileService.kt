@@ -10,19 +10,18 @@ import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
-@Throws(IOException::class)
-fun createImageFile(prefixString: String, timeStampFormat: String, directory: File, suffix:String): File {
-    val p = prefix(prefixString, timeStampFormat)
+const val prefixString = "memo_"
 
-    return File.createTempFile(
-        p,
-        suffix,
+@Throws(IOException::class)
+fun createImageFile(directory: File): File =
+    File.createTempFile(
+        prefix(),
+        "jpg",
         directory
     )
-}
 
-fun prefix(prefixString: String, timeStampFormat: String): String {
-    val timeStamp = SimpleDateFormat(timeStampFormat).format(Date())
+fun prefix(): String {
+    val timeStamp = SimpleDateFormat("yyyyMMdd_hhmmssSSS").format(Date())
     return "${prefixString}${timeStamp}"
 }
 
@@ -34,8 +33,7 @@ fun getRootDirectory(context: Context) =
             }
         }
 
-
-fun createCopyImagePath(imageInputStream: InputStream, targetFile:File): String {
+fun createCopyImagePath(imageInputStream: InputStream, targetFile: File): String {
     val buffer = ByteArray(imageInputStream.available())
     imageInputStream.read(buffer)
     FileOutputStream(targetFile).write(buffer)
@@ -44,12 +42,12 @@ fun createCopyImagePath(imageInputStream: InputStream, targetFile:File): String 
 }
 
 @Throws(IOException::class)
-fun findGalleryImage(context:Context, contentUri:Uri)
-        =context.contentResolver.openInputStream(contentUri) ?: throw IOException()
+fun findGalleryImage(context: Context, contentUri: Uri) =
+    context.contentResolver.openInputStream(contentUri) ?: throw IOException()
 
 @Throws(IOException::class)
 fun deleteImageFile(path: String) {
-    File(path)?.let {
+    File(path).let {
         if (it.exists()) {
             it.delete()
         }
