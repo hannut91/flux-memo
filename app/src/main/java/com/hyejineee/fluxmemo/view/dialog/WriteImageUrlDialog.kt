@@ -5,21 +5,24 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import androidx.databinding.DataBindingUtil.inflate
-import com.android.volley.Request
-import com.android.volley.Response
-import com.android.volley.toolbox.StringRequest
-import com.android.volley.toolbox.Volley
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.hyejineee.fluxmemo.R
+import com.hyejineee.fluxmemo.RxBus
+import com.hyejineee.fluxmemo.RxEvent
 import com.hyejineee.fluxmemo.databinding.DialogEnterUrlBinding
+import com.hyejineee.fluxmemo.services.isValidURL
+import com.jakewharton.rxbinding3.view.clicks
 import com.jakewharton.rxbinding3.widget.editorActionEvents
+import io.reactivex.Observable
+import io.reactivex.Observable.merge
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 
-class WriteImageUrlDialog(val dataCallback: (String) -> Unit) : BottomSheetDialogFragment() {
+class WriteImageUrlDialog : BottomSheetDialogFragment() {
 
-    private val compositeDisables = CompositeDisposable()
+    private val compositeDisposable = CompositeDisposable()
+
     private lateinit var viewDataBinding: DialogEnterUrlBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,30 +40,10 @@ class WriteImageUrlDialog(val dataCallback: (String) -> Unit) : BottomSheetDialo
                 BottomSheetBehavior.STATE_EXPANDED
         }
 
-
     override fun onDestroy() {
         super.onDestroy()
 
-        compositeDisables.clear()
-    }
-
-    fun confirm() {
-        val url = viewDataBinding.urlEditText.text.toString()
-
-        val queue = Volley.newRequestQueue(activity)
-        val stringRequest = StringRequest(
-            Request.Method.GET,
-            url,
-            Response.Listener<String> {
-                viewDataBinding.urlTextInputLayout.error = null
-                dataCallback(url)
-                dismiss()
-            },
-            Response.ErrorListener {
-                viewDataBinding.urlTextInputLayout.error = "올바른 url이 아닙니다."
-            }
-        )
-        queue.add(stringRequest)
+        compositeDisposable.clear()
     }
 
     private fun setView() {
@@ -70,15 +53,27 @@ class WriteImageUrlDialog(val dataCallback: (String) -> Unit) : BottomSheetDialo
             null,
             false
         )
-        viewDataBinding.dialog = this
     }
 
     private fun setEvents() {
-        viewDataBinding.run {
-            urlEditText.editorActionEvents()
+        merge(
+            viewDataBinding.okButton.clicks(),
+            viewDataBinding.urlEditText.editorActionEvents()
                 .filter { it.actionId == EditorInfo.IME_ACTION_GO }
-                .subscribe { confirm() }
-                .addTo(compositeDisables)
-        }
+        )
+            .map { viewDataBinding.urlEditText.text.toString() }
+            .flatMap {
+                isValidURL(context!!, it)
+                    .doOnError { exception ->
+                        viewDataBinding.urlTextInputLayout.error = exception.message
+                    }
+                    .onErrorResumeNext(Observable.empty())
+            }
+            .subscribe {
+                viewDataBinding.urlTextInputLayout.error = null
+                RxBus.publish(RxEvent.UrlValidationSuccess(it))
+                dismiss()
+            }
+            .addTo(compositeDisposable)
     }
 }

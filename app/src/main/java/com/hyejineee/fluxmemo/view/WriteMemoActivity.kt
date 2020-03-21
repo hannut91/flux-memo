@@ -10,10 +10,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.databinding.DataBindingUtil.setContentView
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.hyejineee.fluxmemo.Action
-import com.hyejineee.fluxmemo.ActionType
-import com.hyejineee.fluxmemo.Dispatcher
 import com.hyejineee.fluxmemo.R
+import com.hyejineee.fluxmemo.RxBus
+import com.hyejineee.fluxmemo.RxEvent
 import com.hyejineee.fluxmemo.databinding.ActivityWriteMemoBinding
 import com.hyejineee.fluxmemo.model.Memo
 import com.hyejineee.fluxmemo.services.*
@@ -27,7 +26,7 @@ import kotlinx.android.synthetic.main.activity_write_memo.*
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import java.io.IOException
 
-private const val FILE_PROVIDER = "com.hyejineee.linechallenge.fileprovider"
+private const val FILE_PROVIDER = "com.hyejineee.fluxmemo.fileprovider"
 private const val TAKE_PICTURE = 1
 private const val GET_GALLERY = 2
 private const val GET_URL = 3
@@ -47,10 +46,15 @@ class WriteMemoActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        editMode = memoViewModel.memo.memo.id > 0
+        val memoId = intent.getLongExtra("memoId", -1)
+        editMode = memoId > -1
 
         setView()
         setEvents()
+
+        if (editMode) {
+            RxBus.publish(RxEvent.SubscribeMemo(memoId))
+        }
     }
 
     override fun onDestroy() {
@@ -72,10 +76,8 @@ class WriteMemoActivity : AppCompatActivity() {
     fun deleteMemo(view: View) {
         promptShow(this, title = "주의", content = "삭제하시겠습니까?",
             positiveCallback = { _, _ ->
-                Dispatcher.dispatch(
-                    Action(ActionType.DELETE_MEMO, memoViewModel.memo.memo.id)
-                )
-                finish()
+                val id = memoViewModel.memo.memo.id
+                RxBus.publish(RxEvent.DeleteMemo(id))
             }
         )
     }
@@ -101,10 +103,34 @@ class WriteMemoActivity : AppCompatActivity() {
         }
     }
 
+    private fun takePicture() {
+        lateinit var imagePath: Uri
+        try {
+            imagePath = createImagePath()
+        } catch (e: IOException) {
+            snackBarShort(viewDataBinding.writeMemoActivity, "파일 생성에 실패했습니다.")
+            return
+        }
+
+        val i = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+            .putExtra(MediaStore.EXTRA_OUTPUT, imagePath)
+        startActivityForResult(i, TAKE_PICTURE)
+    }
+
+    private fun pickFromGallery() {
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*" }
+        startActivityForResult(intent, GET_GALLERY)
+    }
+
     private fun showWriteImageUrlDialog() {
-        WriteImageUrlDialog { url ->
-            onActivityResult(GET_URL, Activity.RESULT_OK, Intent().putExtra("url", url))
-        }.show(supportFragmentManager, "")
+        WriteImageUrlDialog().show(supportFragmentManager, "")
+    }
+
+    private fun createImagePath(): Uri {
+        val rootDir = getRootDirectory(this)
+        val newImage = createImageFile(rootDir)
+        imageFilePath = newImage.absolutePath
+        return FileProvider.getUriForFile(this, FILE_PROVIDER, newImage)
     }
 
     private fun setView() {
@@ -116,21 +142,6 @@ class WriteMemoActivity : AppCompatActivity() {
             false
         )
         viewDataBinding.imageList.adapter = imageAdapter
-        imageAdapter.clickListener = {
-            OriginImageDialog(it).show(supportFragmentManager, "")
-        }
-        imageAdapter.longClickListener = { index, path ->
-            promptShow(this, title = "주의", content = "삭제하시겠습니까?",
-                positiveCallback = { _, _ ->
-                    try {
-                        deleteImageFile(path)
-                        imageAdapter.deleteImage(index)
-                    } catch (e: IOException) {
-                        snackBarShort(viewDataBinding.writeMemoActivity, "이미지 삭제에 실패했습니다.")
-                    }
-                }
-            )
-        }
 
         if (!editMode) {
             viewDataBinding.deleteButton.visibility = View.GONE
@@ -138,11 +149,49 @@ class WriteMemoActivity : AppCompatActivity() {
     }
 
     private fun setEvents() {
-        memoViewModel.onMemoChange
-            .subscribe {
-                viewDataBinding.memo = it.memo
-                imageAdapter.images = it.images.map { imagePath -> imagePath.path }
+        RxBus.listen(RxEvent.ImageClick::class.java).subscribe { (path) ->
+            OriginImageDialog(path).show(supportFragmentManager, "")
+        }.addTo(compositeDisposable)
+
+        RxBus.listen(RxEvent.ImageLongClick::class.java).subscribe { (path, position) ->
+            promptShow(
+                this,
+                title = "주의",
+                content = "삭제하시겠습니까?",
+                positiveCallback = { _, _ -> deleteImage(path, position) }
+            )
+        }.addTo(compositeDisposable)
+
+        RxBus.listen(RxEvent.UrlValidationSuccess::class.java)
+            .subscribe { (url) -> imageAdapter.appendImage(url) }
+            .addTo(compositeDisposable)
+
+        RxBus.listen(RxEvent.MemoChange::class.java)
+            .subscribe { (memo) ->
+                viewDataBinding.memo = memo.memo
+                imageAdapter.images = memo.images.map { imagePath -> imagePath.path }
             }.addTo(compositeDisposable)
+
+        RxBus.listen(RxEvent.MemoCreated::class.java)
+            .subscribe { finish() }
+            .addTo(compositeDisposable)
+
+        RxBus.listen(RxEvent.MemoUpdated::class.java)
+            .subscribe { finish() }
+            .addTo(compositeDisposable)
+
+        RxBus.listen(RxEvent.MemoDeleted::class.java)
+            .subscribe { finish() }
+            .addTo(compositeDisposable)
+    }
+
+    private fun deleteImage(path: String, position: Int) {
+        try {
+            deleteImageFile(path)
+            imageAdapter.deleteImage(position)
+        } catch (e: IOException) {
+            snackBarShort(viewDataBinding.writeMemoActivity, "이미지 삭제에 실패했습니다.")
+        }
     }
 
     private fun updateOrCreate() {
@@ -164,8 +213,7 @@ class WriteMemoActivity : AppCompatActivity() {
             return
         }
 
-        Dispatcher.dispatch(Action(ActionType.CREATE_MEMO, memo, imageAdapter.images))
-        finish()
+        RxBus.publish(RxEvent.CreateMemo(memo, imageAdapter.images))
     }
 
     private fun updateMemo() {
@@ -179,20 +227,18 @@ class WriteMemoActivity : AppCompatActivity() {
             return
         }
 
-        Dispatcher.dispatch(Action(ActionType.UPDATE_MEMO, memo, imageAdapter.images))
-        finish()
+        RxBus.publish(RxEvent.UpdateMemo(memo, imageAdapter.images))
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+
         if (resultCode == Activity.RESULT_CANCELED || data == null) {
             return
         }
 
         when (requestCode) {
-            TAKE_PICTURE -> {
-                imageAdapter.appendImage(imageFilePath)
-            }
+            TAKE_PICTURE -> imageAdapter.appendImage(imageFilePath)
             GET_GALLERY -> {
                 try {
                     val rootDir = getRootDirectory(this)
@@ -206,39 +252,6 @@ class WriteMemoActivity : AppCompatActivity() {
                     snackBarShort(viewDataBinding.writeMemoActivity, "이미지를 추가할 수 없습니다.")
                 }
             }
-            GET_URL -> {
-                imageAdapter.appendImage(data.getStringExtra("url")!!)
-            }
         }
-    }
-
-    private fun takePicture() {
-        lateinit var imagePath: Uri
-        try {
-            imagePath = createImagePath()
-        } catch (e: IOException) {
-            snackBarShort(viewDataBinding.writeMemoActivity, "파일 생성에 실패했습니다.")
-            return
-        }
-
-        val i = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            .putExtra(MediaStore.EXTRA_OUTPUT, imagePath)
-        startActivityForResult(i, TAKE_PICTURE)
-    }
-
-    private fun pickFromGallery() {
-        val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*" }
-        startActivityForResult(intent, GET_GALLERY)
-    }
-
-    private fun createImagePath(): Uri {
-        val rootDir = getRootDirectory(this)
-        val newImage = createImageFile(rootDir)
-        imageFilePath = newImage.absolutePath
-        return FileProvider.getUriForFile(
-            this,
-            FILE_PROVIDER,
-            newImage
-        )
     }
 }

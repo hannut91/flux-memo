@@ -4,12 +4,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import com.hyejineee.fluxmemo.RxBus
+import com.hyejineee.fluxmemo.RxEvent
 import com.hyejineee.fluxmemo.databinding.MemoItemBinding
 import com.hyejineee.fluxmemo.model.MemoWithImages
 
-class MemoAdapter(
-    val clickListener: (Long) -> Unit
-) : RecyclerView.Adapter<MemoAdapter.ViewHolder>() {
+class MemoAdapter : RecyclerView.Adapter<MemoAdapter.ViewHolder>() {
 
     var memos = listOf<MemoWithImages>()
         set(value) {
@@ -32,7 +32,7 @@ class MemoAdapter(
                     memoImage.visibility = View.GONE
                 }
 
-                root.setOnClickListener { clickListener(memoWithImages.memo.id) }
+                root.setOnClickListener { RxBus.publish(RxEvent.MemoClick(memoWithImages.memo.id)) }
                 executePendingBindings()
             }
         }

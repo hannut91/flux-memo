@@ -6,10 +6,9 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.databinding.DataBindingUtil.setContentView
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.hyejineee.fluxmemo.ActionType
-import com.hyejineee.fluxmemo.Action
-import com.hyejineee.fluxmemo.Dispatcher
 import com.hyejineee.fluxmemo.R
+import com.hyejineee.fluxmemo.RxBus
+import com.hyejineee.fluxmemo.RxEvent
 import com.hyejineee.fluxmemo.databinding.ActivityMainBinding
 import com.hyejineee.fluxmemo.view.adapter.MemoAdapter
 import com.hyejineee.fluxmemo.viewmodels.MemoViewModel
@@ -22,7 +21,7 @@ class MainActivity : AppCompatActivity() {
     private val compositeDisposable = CompositeDisposable()
 
     private val memoViewModel: MemoViewModel by viewModel()
-    private val memosAdapter = MemoAdapter(::goToMemoDetailActivity)
+    private val memosAdapter = MemoAdapter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,7 +29,9 @@ class MainActivity : AppCompatActivity() {
         setView()
         setEvents()
 
-        Dispatcher.dispatch(Action(ActionType.GET_MEMOS,""))
+        memoViewModel
+
+        RxBus.publish(RxEvent.SubscribeMemos())
     }
 
     override fun onDestroy() {
@@ -40,11 +41,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun goToWriteMemoActivity(view: View) {
-        goToMemoDetailActivity(-1)
-    }
-
-    private fun goToMemoDetailActivity(memoId: Long) {
-        Dispatcher.dispatch(Action(ActionType.GET_MEMO, memoId))
         startActivity(Intent(this, WriteMemoActivity::class.java))
     }
 
@@ -57,8 +53,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setEvents() {
-        memoViewModel.onMemosChange
-            .subscribe { memosAdapter.memos = it }
+        RxBus.listen(RxEvent.MemosChange::class.java)
+            .subscribe { (memos) -> memosAdapter.memos = memos }
             .addTo(compositeDisposable)
+
+        RxBus.listen(RxEvent.MemoClick::class.java)
+            .subscribe { (memoId) ->
+                val i = Intent(this, WriteMemoActivity::class.java)
+                    .putExtra("memoId", memoId)
+                startActivity(i)
+            }.addTo(compositeDisposable)
     }
 }
