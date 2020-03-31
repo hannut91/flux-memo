@@ -3,12 +3,11 @@ package com.hyejineee.fluxmemo.view.adapter
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import com.hyejineee.fluxmemo.RxBus
+import com.hyejineee.fluxmemo.RxEvent
 import com.hyejineee.fluxmemo.databinding.ImageItemBinding
 
 class ImageAdapter : RecyclerView.Adapter<ImageAdapter.ViewHolder>() {
-    var clickListener: (String) -> Unit = {
-    }
-    var longClickListener: (Int, String) -> Unit = { _, _ -> }
 
     var images = listOf<String>()
         set(value) {
@@ -23,9 +22,9 @@ class ImageAdapter : RecyclerView.Adapter<ImageAdapter.ViewHolder>() {
         fun bind(path: String, position: Int) {
             binding.apply {
                 imagePath = path
-                binding.root.setOnClickListener { clickListener(path) }
+                binding.root.setOnClickListener { RxBus.publish(RxEvent.ImageClick(path)) }
                 binding.root.setOnLongClickListener {
-                    longClickListener(position, path)
+                    RxBus.publish(RxEvent.ImageLongClick(path, position))
                     true
                 }
                 binding.executePendingBindings()

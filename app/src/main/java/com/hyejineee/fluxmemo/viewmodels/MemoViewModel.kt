@@ -1,92 +1,71 @@
 package com.hyejineee.fluxmemo.viewmodels
 
 import androidx.lifecycle.ViewModel
-import com.hyejineee.fluxmemo.ActionType
-import com.hyejineee.fluxmemo.Dispatcher
+import com.hyejineee.fluxmemo.RxBus
+import com.hyejineee.fluxmemo.RxEvent
 import com.hyejineee.fluxmemo.datasources.MemoDataSource
-import com.hyejineee.fluxmemo.model.Memo
 import com.hyejineee.fluxmemo.model.MemoWithImages
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
-import io.reactivex.subjects.BehaviorSubject
-import io.reactivex.subjects.Subject
 
 class MemoViewModel(private val memoDataSource: MemoDataSource) : ViewModel() {
 
     private val compositeDisposable = CompositeDisposable()
+
     var memos: List<MemoWithImages> = emptyList()
         set(value) {
             field = value
-            onMemosChange.onNext(field)
+            RxBus.publish(RxEvent.MemosChange(value))
         }
-    var onMemosChange: Subject<List<MemoWithImages>> = BehaviorSubject.createDefault(memos)
 
     var memo: MemoWithImages = MemoWithImages()
         set(value) {
             field = value
-            onMemoChange.onNext(field)
+            RxBus.publish(RxEvent.MemoChange(value))
         }
-    var onMemoChange: Subject<MemoWithImages> = BehaviorSubject.createDefault(memo)
 
     init {
-        setSubscribeDispatcher()
-    }
+        RxBus.listen(RxEvent.SubscribeMemos::class.java)
+            .flatMap { memoDataSource.findAllWithImages() }
+            .subscribeOn(Schedulers.newThread())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { memos = it }
+            .addTo(compositeDisposable)
 
-    private fun setSubscribeDispatcher() {
-        Dispatcher.onAction.subscribe { action ->
-            when (action.type) {
-                ActionType.GET_MEMOS -> {
-                    getAllMemos()
-                        .subscribeOn(Schedulers.newThread())
-                        .observeOn(AndroidSchedulers.mainThread())
-                        .subscribe { memos = it }
-                }
-                ActionType.GET_MEMO -> {
-                    if (action.data[0] is Long) {
-                        if (action.data[0] == -1L) {
-                            memo = MemoWithImages()
-                        } else {
-                            getMemo(action.data[0] as Long)
-                                .subscribeOn(Schedulers.newThread())
-                                .observeOn(AndroidSchedulers.mainThread())
-                                .subscribe { memo = it }
-                        }
-                    }
-                }
-                ActionType.UPDATE_MEMO -> {
-                    val memo = action.data[0] as Memo
-                    val images = action.data[1] as List<String>
+        RxBus.listen(RxEvent.SubscribeMemo::class.java)
+            .flatMap { (memoId) -> memoDataSource.findByIdWithImages(memoId) }
+            .subscribeOn(Schedulers.newThread())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { memo = it }
+            .addTo(compositeDisposable)
 
-                    updateMemo(memo, images)
-                        .subscribeOn(Schedulers.newThread())
-                        .subscribe()
-                }
-                ActionType.DELETE_MEMO ->{
-                    val memoId = action.data[0] as Long
-                    deleteMemo(memoId)
-                        .subscribeOn(Schedulers.newThread())
-                        .subscribe()
-                }
-                ActionType.CREATE_MEMO ->{
-                    val memo = action.data[0] as Memo
-                    val images = action.data[1] as List<String>
-                    createMemoWithImages(memo, images)
-                        .subscribeOn(Schedulers.newThread())
-                        .subscribe {}
-                }
+        RxBus.listen(RxEvent.CreateMemo::class.java)
+            .subscribe { (memo, images) ->
+                memoDataSource.save(memo, images)
+                    .subscribeOn(Schedulers.newThread())
+                    .observeOn(AndroidSchedulers.mainThread())
+                    .subscribe { RxBus.publish(RxEvent.MemoCreated()) }
             }
-        }.addTo(compositeDisposable)
+            .addTo(compositeDisposable)
+
+        RxBus.listen(RxEvent.UpdateMemo::class.java)
+            .subscribe { (memo, images) ->
+                memoDataSource.update(memo, images)
+                    .subscribeOn(Schedulers.newThread())
+                    .observeOn(AndroidSchedulers.mainThread())
+                    .subscribe { RxBus.publish(RxEvent.MemoUpdated()) }
+            }
+            .addTo(compositeDisposable)
+
+        RxBus.listen(RxEvent.DeleteMemo::class.java)
+            .subscribe { (memoId) ->
+                memoDataSource.delete(memoId)
+                    .subscribeOn(Schedulers.newThread())
+                    .observeOn(AndroidSchedulers.mainThread())
+                    .subscribe { RxBus.publish(RxEvent.MemoDeleted()) }
+            }
+            .addTo(compositeDisposable)
     }
-
-    fun createMemoWithImages(memo: Memo, images: List<String>) = memoDataSource.save(memo, images)
-
-    fun getAllMemos() = memoDataSource.findAllWithImages()
-
-    fun getMemo(id: Long) = memoDataSource.findByIdWithImages(id)
-
-    fun updateMemo(memo: Memo, images: List<String>) = memoDataSource.update(memo, images)
-
-    fun deleteMemo(id: Long) = memoDataSource.delete(id)
 }
